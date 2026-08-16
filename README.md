@@ -1,311 +1,260 @@
-<h1 align="center">BidX: Real-Time Auction/Bidding Platform (API)</h1>
-<p align="center">
-  <a href="https://bid-x.vercel.app/">Live Demo</a> &nbsp;&bull;&nbsp;
-  <a href="https://bidx.runasp.net/swagger/index.html">Swagger Documentation</a> &nbsp;&bull;&nbsp;
-  <a href="https://github.com/Youssef-Adell/BidX-Client">Frontend Repository</a>
-</p>
+# AuctionX — Real-Time Auction Platform API
 
-## 📖 Overview  
-**BidX** modernizes traditional auction processes by enabling real-time digital bidding. Users can participate in live auctions, place bids, track updates instantly, and interact securely with auction winners or auctioneers—all while receiving immediate notifications for critical actions like bid acceptance or outbidding.  
+A backend API for a live auction platform built with **ASP.NET Core 9**. Users can list items, place competitive bids, accept winning bids, chat privately with the winner, and receive instant notifications — all powered by WebSockets via SignalR.
 
-### Demo Video  
-[![Demo Video](https://img.youtube.com/vi/xvVibJIRsc0/maxresdefault.jpg)](https://www.youtube.com/watch?v=xvVibJIRsc0)
+---
 
-### Key Features  
-- **Real-Time Bidding**: Place and track bids with live price updates. Auctioneer can accept bids instantly.  
-- **Real-Time Chat**: Chat is restricted to auction winners and auctioneers, with read receipts and user status indicators.  
-- **Real-Time Notifications**: Bidders get alerts for accepted or outbid bids; auctioneers are notified of new bids.  
-- **Real-Time Auctions Feed**: Live updates for new, deleted, or ended auctions, and price changes. Includes filtering and search.  
-- **Reviews**: Reviews are allowed only between auction winners and auctioneers.  
-- **Authentication**: Supports traditional email/password authentication and Google authentication.  
+## Tech Stack
 
-### Solution Architecture  
-![Architecture Diagram](docs/BidX_Architecture.png)
+| Layer | Technology |
+|---|---|
+| Framework | ASP.NET Core 9 |
+| ORM | Entity Framework Core 9 (Code First) |
+| Database | Microsoft SQL Server 2022 |
+| Real-Time | ASP.NET Core SignalR |
+| Authentication | ASP.NET Core Identity + JWT + Google OAuth (OpenID Connect) |
+| Background Jobs | Quartz.NET |
+| Email | Brevo (Transactional Email API) |
+| Image Storage | Cloudinary |
+| Logging | Serilog |
+| Containerization | Docker + Docker Compose |
 
-### Tech Stack  
-- [ASP.NET Core 9](https://dotnet.microsoft.com/en-us/apps/aspnet/) - A free, cross-platform and open-source web-development framework.
-- [Entity Framework Core 9](https://learn.microsoft.com/en-us/ef/core/) - An open source object–relational mapping framework.
-- [Microsoft SQL Server](https://hub.docker.com/_/microsoft-mssql-server) - A relational database management system.
-- [SignalR](https://dotnet.microsoft.com/en-us/apps/aspnet/signalr) - A library that enables real-time communication between servers and clients.
-- [ASP.NET Core Identity](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity) - A membership system for managing users, authentication, and authorization in ASP.NET Core applications.
-- [JWT](https://jwt.io/) - A secure, compact token format used for transmitting information between parties as a JSON object.
-- [Serilog](https://serilog.net/) - A logging library that allows logging to various outputs like files, console, etc.
-- [MediatR](https://github.com/jbogard/MediatR) - A simple, unambitious mediator implementation in .NET for in-process messaging.
-- [Quartz.NET](https://www.quartz-scheduler.net/) - An open source job scheduling system for .NET.
-- [Docker](https://www.docker.com/) - A containerization platform for packaging applications and their dependencies.
+---
 
-### Third-Party Services
-- [Google Identity Services (OpenID Connect)](https://developers.google.com/identity) - An authentication solution enabling secure sign-in with Google using OpenID Connect and OAuth 2.0.  
-- [Cloudinary](https://cloudinary.com/) - A cloud-based service for file storage and image management. 
-- [Brevo](https://www.brevo.com/) - An email sending service.  
+## Features
 
+### Auctions
+- Create an auction with product images, starting price, minimum bid increment, duration, category, and city
+- Browse the feed with filters: category, city, product condition (New/Used), active-only, and keyword search
+- Paginated results on all listing endpoints
+- Live feed updates (new auction, deleted, ended, price changed) pushed to all subscribed clients
 
-## 🌐 REST API Documentation  
-Check **[Swagger Documentation](https://bidx.runasp.net/swagger/index.html)** for full endpoint details.
+### Bidding
+- Place and accept bids in real time via SignalR — no polling
+- Bid validation: auctioneer cannot bid on their own auction, bid must exceed current price by the minimum increment, auction must still be active
+- Accepting a bid immediately ends the auction and notifies all participants
 
-### Authentication Flows
-#### Google Login Flow
-<img src="docs/Auth_Google_Login_Flow.png" width="600"/>
+### Real-Time Chat
+- Private chat channel between the auction winner and the auctioneer only
+- Read receipts (per-message and mark-all-read)
+- Online/offline status pushed to chat participants on connect/disconnect
+- Unread chat count pushed to the user on connection
 
-1. Client authenticates with Google to get an `idToken`.  
-2. `idToken` is sent to the BidX API.  
-3. API returns `userInfo` + `accessToken`, and sets a `refreshToken` in an HTTP-only cookie.
+### Notifications
+- In-app notifications when a bid is placed (notifies auctioneer + previous highest bidder) and when a bid is accepted (notifies winner + all other bidders)
+- Delivered reliably via the **Outbox Pattern** — notifications are written atomically with the bid and processed by a background job
+- Unread count pushed in real time via SignalR
 
-#### Email/Password Login Flow
-<img src="docs/Auth_Traditional_Login_Flow.png" width="600"/>
+### Reviews
+- Leave a review only if you were the winner or auctioneer on the same completed auction
+- One review per pair — duplicate attempts return 409
+- `User.AverageRating` kept in sync automatically via a SQL trigger
 
-1. Client sends email/password to BidX API.  
-2. API returns `userInfo` + `accessToken`, and sets a `refreshToken` in an HTTP-only cookie.  
+### Authentication
+- Email/password registration with email confirmation (link sent via Brevo)
+- Google sign-in — client sends `idToken`, server validates it server-side via `Google.Apis.Auth`
+- JWT access tokens (30-minute expiry, HMAC-SHA256)
+- Refresh tokens stored in DB; delivered as HTTP-only CHIPS partitioned cookie for browsers, response body for mobile
+- Account lockout after repeated failed login attempts
+- Forgot password / reset password via emailed token
+- Change password while authenticated
 
-#### Token Refresh Flow
-<img src="docs/Auth_Refresh_Token_Flow.png" width="600"/>
+### Admin
+- Category management (add, update, soft-delete) — SVG icon upload via Cloudinary
+- Admin account seeded automatically on startup from environment variables
 
-1. Client sends request to `/refresh` endpoint with the HTTP-only `refreshToken` cookie.  
-2. API returns new `userInfo` + `accessToken`.  
+---
 
-> [!NOTE]
-> Refresh tokens **returned in the response body for non-browser clients** (e.g., mobile apps).
+## Architecture
 
-### Error Handling
-A standardized error response is returned if an error occurs.
-```json
-{  
-  "errorCode": "AUTH_EMAIL_NOT_CONFIRMED",  
-  "errorMessages": ["The email has not been confirmed"]  
-}  
+The solution is split into **three projects**:
+
 ```
-Here are the available [error codes](src/BidX.BusinessLogic/DTOs/CommonDTOs/ErrorCode.cs).
+AuctionX (solution)
+├── BidX.Presentation     — Controllers, SignalR Hub, Background Job, Middleware, DI setup
+├── BidX.BusinessLogic    — Services, DTOs, Interfaces, Domain Events, MediatR Handlers
+└── BidX.DataAccess       — AppDbContext, Entities, EF Configurations, Migrations, SQL Triggers
+```
 
-## ⚡ Real-Time API Documentation (SignalR)  
+Dependency direction is strictly one-way: `Presentation → BusinessLogic → DataAccess`.
 
-### Notes Before Starting 
-- BidX uses a room-based **Pub-Sub model**:  
-  - **Why?** To enhance the performance and prevent clients from being flooded with irrelevant events.  
-- The connection **must be restarted when logging in or logging out**:
-  - **Why?** To avoid an authorized connection being used by an unauthorized client or vice versa.
+**Request flow:**
+```
+HTTP Client
+  → Controller
+  → Service (injected via interface)
+  → AppDbContext (EF Core)
+  → SQL Server
+  → DTO response returned
 
-### Client Integration Example  
-```javascript  
-const connection = new signalR.HubConnectionBuilder()  
-  .withUrl(`${import.meta.env.VITE_BIDX_API_URL}/hub`, {  
-    accessTokenFactory: () => accessToken,  
-    transport: signalR.HttpTransportType.WebSockets,  
-    skipNegotiation: true       // Skip the negotiate request and establish the WS connection directly
-  })  
-  .withServerTimeout(10000)     // 2X the KeepAliveInterval value configured by the server
-  .withKeepAliveInterval(5000)  // 0.5X the ClientTimeoutInterval value configured by the server
-  .withAutomaticReconnect()  
-  .build();  
-
-// Start connection  
-try {  
-  await connection.start();  
-} catch (err) {  
-  console.log(err);  
-}  
-
-// Invoke server method  
-connection.invoke("PlaceBid", { auctionId: "123", amount: 500 });  
-
-// Listen for server event  
-connection.invoke("JoinAuctionRoom");   // Subscribe to receive updates. 
-connection.on("BidPlaced", (response) => {  
-  console.log("New bid placed:", response);  
-});
-connection.invoke("LeaveAuctionRoom");  // Unsubscribe to stop receiving updates.
+SignalR action (e.g. PlaceBid):
+  → Hub method
+  → Service
+  → DB save + OutboxMessage written (same transaction)
+  → SignalR broadcasts to group
+  → (1 second later) Quartz job processes OutboxMessage → MediatR event → notification saved → SignalR pushes unread count
 ```
 
 ---
-### Bidding Workflow  
-<img src="docs/Bidding_Place_Flow.png" width="800"/>
-<img src="docs/Bidding_Accept_Flow.png" width="800"/>
 
-#### Client-to-Server Methods  
+## Database Design
 
-| Method | Parameters | Description |  
-|------------|------------------------------------|----------------------------------|  
-| `PlaceBid` | [`BidRequest`](src/BidX.BusinessLogic/DTOs/BidDTOs/BidRequest.cs) | Submit a bid for an auction. |  
-| `AcceptBid` | [`AcceptBidRequest`](src/BidX.BusinessLogic/DTOs/BidDTOs/AcceptBidRequest.cs) | Auctioneer accepts a bid. |  
-| `JoinAuctionRoom` | [`JoinAuctionRoomRequest`](src/BidX.BusinessLogic/DTOs/AuctionDTOs/JoinAuctionRoomRequest.cs) | Subscribe to auction updates. |  
-| `LeaveAuctionRoom` | [`LeaveAuctionRoomRequest`](src/BidX.BusinessLogic/DTOs/AuctionDTOs/LeaveAuctionRoomRequest.cs) | Unsubscribe from auction updates.|  
+EF Core Code First with manual optimizations:
 
-#### Server-to-Client Events  
-| Event                | Parameters                         | Audience               |  
-|----------------------|------------------------------------|------------------------|  
-| `BidPlaced`          | [`BidResponse`](src/BidX.BusinessLogic/DTOs/BidDTOs/BidResponse.cs) | Clients in auction room|  
-| `BidAccepted`        | [`BidResponse`](src/BidX.BusinessLogic/DTOs/BidDTOs/BidResponse.cs) | Clients in auction room|  
+### Denormalization
+| Column | Why |
+|---|---|
+| `Chat.LastMessageId` | Avoids a correlated subquery on every chat list fetch |
+| `User.AverageRating` | Avoids a `GROUP BY AVG` join on every profile card |
 
----
+### SQL Triggers
+- `last_message_trigger` — fires `AFTER INSERT` on `Message`, updates `Chat.LastMessageId`
+- `average_rating_trigger` — fires `AFTER INSERT, UPDATE, DELETE` on `Review`, recalculates `User.AverageRating`
 
-### Auction Feed Workflow  
-<img src="docs/Auction_Create.png" width="800"/>
-<img src="docs/Auction_Delete.png" width="800"/>
+Both triggers are defined in `src/BidX.DataAccess/SQL/` and applied via EF Core migrations.
 
-#### Client-to-Server Methods  
-| Method             | Parameters | Description                |  
-|--------------------|------------|----------------------------|  
-| `JoinFeedRoom`     | *None*     | Subscribe to feed updates. |  
-| `LeaveFeedRoom`    | *None*     | Unsubscribe from updates.  |  
+### Covering Indexes
+| Index | Query it supports |
+|---|---|
+| `Chat(Participant1Id) INCLUDE (Participant2Id, LastMessageId)` | Fetch all chats for a user |
+| `Chat(Participant2Id) INCLUDE (Participant1Id, LastMessageId)` | Same, for the other participant |
+| `Bid(AuctionId, Amount, IsAccepted) DESC` | Get highest bid / current price |
+| `Auction(EndTime)` | Filter active auctions |
+| `User(RefreshToken)` | Refresh token lookup |
 
-#### Server-to-Client Events  
-| Event                 | Parameters         | Audience          |  
-|-----------------------|----------------------------------------|-------------------|  
-| `AuctionCreated`      | [`AuctionResponse`](src/BidX.BusinessLogic/DTOs/AuctionDTOs/AuctionResponse.cs) | Feed room clients |  
-| `AuctionDeleted`      | [`AuctionDeletedResponse`](src/BidX.BusinessLogic/DTOs/AuctionDTOs/AuctionDeletedResponse.cs) | Feed room clients |  
-| `AuctionEnded`        | [`AuctionEndedResponse`](src/BidX.BusinessLogic/DTOs/AuctionDTOs/AuctionEndedResponse.cs) | Feed room clients |  
-| `AuctionPriceUpdated` | [`AuctionPriceUpdatedResponse`](src/BidX.BusinessLogic/DTOs/AuctionDTOs/AuctionPriceUpdatedResponse.cs) | Feed room clients |  
-
----
-
-### Chat Workflow  
-<img src="docs/Chat_Send_Flow.png" width="800"/>
-<img src="docs/Chat_Read_Flow.png" width="800"/>
-<img src="docs/Chat_Status_Changed_Flow.png" width="800"/>
-
-#### Client-to-Server Methods  
-| Method               | Parameters     | Description                |  
-|----------------------|------------------------------------|----------------------------|  
-| `SendMessage`        | [`SendMessageRequest`](src/BidX.BusinessLogic/DTOs/ChatDTOs/SendMessageRequest.cs) | Send a chat message.       |  
-| `MarkMessageAsRead`  | [`MarkMessageAsReadRequest`](src/BidX.BusinessLogic/DTOs/ChatDTOs/MarkMessageAsReadRequest.cs) | Mark a message as read.    |  
-| `MarkAllMessagesAsRead`| [`MarkAllMessagesAsReadRequest`](src/BidX.BusinessLogic/DTOs/ChatDTOs/MarkAllMessagesAsReadRequest.cs) | Mark all messages received as read.    |  
-| `JoinChatRoom`       | [`JoinChatRoomRequest`](src/BidX.BusinessLogic/DTOs/ChatDTOs/JoinChatRoomRequest.cs) | Subscribe to chat updates. |  
-| `LeaveChatRoom`      | [`LeaveChatRoomRequest`](src/BidX.BusinessLogic/DTOs/ChatDTOs/LeaveChatRoomRequest.cs) | Unsubscribe from updates.  |  
-
-#### Server-to-Client Events  
-| Event                  | Parameters      | Audience          |  
-|------------------------|------------------------------------|-------------------|  
-| `MessageReceived`      | [`MessageResponse`](src/BidX.BusinessLogic/DTOs/ChatDTOs/MessageResponse.cs)             | Chat room clients |  
-| `MessageRead`          | [`MessageReadResponse`](src/BidX.BusinessLogic/DTOs/ChatDTOs/MessageReadResponse.cs)         | Chat room clients |  
-| `AllMessagesRead`      | [`AllMessagesReadResponse`](src/BidX.BusinessLogic/DTOs/ChatDTOs/AllMessagesReadResponse.cs)     | Chat room clients |  
-| `UserStatusChanged`    | [`UserStatusResponse`](src/BidX.BusinessLogic/DTOs/ChatDTOs/UserStatusResponse.cs)          | Chat room clients |  
-| `UnreadChatsCountUpdated` | [`UnreadChatsCountResponse`](src/BidX.BusinessLogic/DTOs/ChatDTOs/UnreadChatsCountResponse.cs) | Affected user     |  
-
----
-
-### Notifications Workflow  
-<img src="docs/Notifications_Read_Flow.png" width="600"/>
-
-#### Client-to-Server Methods  
-| Method                       | Parameters      | Description                  |  
-|------------------------------|------------------------------------|------------------------------|  
-| `MarkNotificationAsRead`     | [`MarkNotificationAsReadRequest`](src/BidX.BusinessLogic/DTOs/NotificationDTOs/MarkNotificationAsReadRequest.cs)| Mark a notification as read.|  
-| `MarkAllNotificationsAsRead` | *None*                             | Mark all notifications received as read.|  
-
-#### Server-to-Client Events  
-| Event                          | Parameters          | Audience       |  
-|--------------------------------|----------------------------------------|----------------|  
-| `UnreadNotificationsCountUpdated` | [`UnreadNotificationsCountResponse`](src/BidX.BusinessLogic/DTOs/NotificationDTOs/UnreadNotificationsCountResponse.cs)| Affected user |  
-
----
-
-### Error Handling
-A standardized error response is returned if an error occur.
-```json
-{  
-  "errorCode": "BIDDING_NOT_ALLOWED",  
-  "errorMessages": ["Auction has ended"]  
-}  
-```
-Errors triggered via `ErrorOccurred` event.
-| Event          | Parameters | Audience          |  
-|----------------|--------------------------------|-------------------|  
-| `ErrorOccurred`| [`ErrorResponse`](src/BidX.BusinessLogic/DTOs/CommonDTOs/ErrorResponse.cs)           | Caller client only|  
-
-
-# 🗃️ Database Design
-Although I'm using the **EF Core Code First approach** (where the database is generated from the C# entity classes), I still prefer to start any project by designing the database and normalize it.
+### Outbox Pattern
+Events like `BidPlacedEvent` and `BidAcceptedEvent` are written to an `OutboxMessages` table in the same DB transaction as the bid. A Quartz.NET job polls every second, deserializes the event, publishes it via MediatR, and marks it processed. Idempotency is enforced by a unique constraint on `(RecipientId, EventId)` in `NotificationRecipient`.
 
 ### ER Diagram
 ![ER Diagram](docs/BidX_ERD_V5.png)
 
-### Optimizations
-The database is optimized for performance through **strategic denormalization** and **Covering indexes**:  
-- **Denormalized Columns**:  
-  - `Chat.LastMessageId`: Added to avoid expensive joins when fetching chats with their latest message.
-  - `User.AverageRating`: Added to avoid expensive joins and calculations when fetching the users with their average rating.
-- **Triggers**: Ensure denormalized columns stay synchronized with source data (e.g., updating `LastMessageId` when a message is added).
-  - See the [`SQL/`](src/BidX.DataAccess/Configs/) folder for triggers definitions.  
-- **Covering Indexes**: Applied to frequently queried columns to avoid full table scans.
-  - See the [`Configs/`](src/BidX.DataAccess/Configs/) folder for index definitions.
+---
 
-> [!NOTE]
-> Some auth-related tables have been omitted from the diagram for simplicity and clarity.
+## API Overview
 
+| Group | Endpoints |
+|---|---|
+| Auth | Register, Confirm Email, Login, Google Login, Refresh, Forgot Password, Reset Password, Change Password, Logout |
+| Auctions | List (with filters), Get details, Create, Delete |
+| Bids | List bids, Get highest bid, Get accepted bid |
+| Users | Get profile, Update profile, Update profile picture, Created auctions, Bidded auctions |
+| Chats | List chats, Create/get chat, Get messages |
+| Reviews | List reviews, Add, Get mine, Update mine, Delete mine |
+| Notifications | List notifications |
+| Categories | List, Get, Add (Admin), Update (Admin), Delete (Admin) |
+| Cities | List |
 
-## 🚧 Challenges
-Here are some challenges I encountered during development and the solutions I implemented to overcome them:
-1. ### Handling Refresh Tokens Across different Clients
-   - **Challenge**: Refresh tokens needed to be returned as **HTTP-only cookies** for browser clients (for security) and in the **response body** for non-browser clients (e.g., mobile apps).  
-   - **Solution**: Used the [`User-Agent`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent) HTTP header to detect the client type and conditionally set the token delivery method.  
+SignalR hub at `/hub`:
 
-2. ### Third-Party Cookie Restrictions
-   - **Challenge**: Modern browsers **disable third-party cookies by default** or let users opt out to protect privacy. This broke token refreshes because the frontend (e.g., `bidx-app.com`) and backend (`bidx-api.com`) were on separate domains.  
-   - **Solution**: Adopted [**CHIPS (Partitioned Cookies)**](https://developers.google.com/privacy-sandbox/cookies/chips).  
-     - **How It Works**:  
-       - The backend sets a `refreshToken` cookie with the `Partitioned` attribute.  
-       - The cookie is stored in a **partitioned space**, tied strictly to the top-level domain (`bidx-app.com`).  
-       - It’s sent **only** when the frontend explicitly calls the backend, avoiding cross-site tracking risks.  
+| Method (Client → Server) | Description |
+|---|---|
+| `PlaceBid` | Submit a bid |
+| `AcceptBid` | Auctioneer accepts a bid |
+| `JoinAuctionRoom / LeaveAuctionRoom` | Subscribe/unsubscribe to auction updates |
+| `JoinFeedRoom / LeaveFeedRoom` | Subscribe/unsubscribe to feed updates |
+| `SendMessage` | Send a chat message |
+| `MarkMessageAsRead / MarkAllMessagesAsRead` | Mark messages read |
+| `JoinChatRoom / LeaveChatRoom` | Subscribe/unsubscribe to chat updates |
+| `MarkNotificationAsRead / MarkAllNotificationsAsRead` | Mark notifications read |
 
-3. ### Time Zone-Agnostic Auction Scheduling 
-   - **Challenge**: Managing auction start and end times across different time zones without relying on user-local time inputs, which can lead to ambiguity due to regional offsets and daylight saving rules.  
-   - **Solution**:  
-     - **Duration-Based Scheduling**: Users specify auction duration in **seconds** (e.g., 86400 seconds for 24 hours).  
-     - **UTC Anchoring**: Calculate and store the start time as `DateTimeOffset.UtcNow` and derive the end time by adding the duration to this UTC anchor.  
-     - **Frontend Localization**: Display times in the user’s local time zone while processing all timestamps in UTC.  
+---
 
-4. ### Optimizing Auction Feed Loading Time 
-   - **Challenge**: The auctions feed page (and other pages with auction lists) had slow loading times because the original uploaded images were used as thumbnails, which were large in size.  
-   - **Solution**: Created a separate, compressed, lower-quality version of the image using **Cloudinary** to be set as a thumbnail for auctions and serve them for feed page and serve full-resolution images for auction details page only.  
+## Error Response Format
 
+All errors (HTTP and SignalR) use the same shape:
 
-## 🛠️ Setup & Run 
-### 1. Prerequisites  
-- Install [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/install/).  
-- Clone the repository:  
-```bash  
-git clone https://github.com/Youssef-Adell/BidX-API.git 
-cd BidX-API 
-```
-### 2. Configure Environment Variables  
-- Rename the example files:  
-  - `webapi.env.example` → `webapi.env`  
-  - `sqlserver.env.example` → `sqlserver.env`  
-- Update the `.env` files with your credentials:  
-  - `webapi.env`: Add database connection strings, JWT secret, and third-party API keys.  
-  - `sqlserver.env`: Set the SQL Server admin password.  
-
-### 3. Edit [`appsettings.json`](src/BidX.Presentation/appsettings.json)  
-Update the following attributes in `appsettings.json` as needed:  
-```json  
-"BrevoEmailApi": {
-  "ConfirmationEmailTemplateId": "3",
-  "PasswordResetEmailTemplateId": "5"
-},
-"Cors": {
-  "FrontendOrigin": "http://localhost:3000"
-},
-"AuthPages": {
-  "EmailConfirmationPageUrl": "http://localhost:3000/confirm-email",
-  "ResetPasswordPageUrl": "http://localhost:3000/reset-password"
+```json
+{
+  "errorCode": "BIDDING_NOT_ALLOWED",
+  "errorMessages": ["Bid amount must be greater than the current price."]
 }
 ```
 
-### 4. Start the Application  
-Run the following command to build and start the containers:  
-```bash  
-docker-compose up --build  
+Full list of error codes: [`ErrorCode.cs`](src/BidX.BusinessLogic/DTOs/CommonDTOs/ErrorCode.cs)
+
+---
+
+## Setup & Run
+
+### Prerequisites
+- [Docker](https://www.docker.com/) and Docker Compose
+
+### Steps
+
+**1. Clone the repo**
+```bash
+git clone https://github.com/sharnam20/AuctionX.git
+cd AuctionX
 ```
 
-- The API will be available at http://localhost:5000.
-- SQL Server will be accessible at localhost:1433.
+**2. Create environment files**
 
-> [!NOTE]
-> Database, logs, and DataProtection keys are stored in Docker volumes (sqlserver-data, webapi-logs, dataprotection-keys) to ensure data persistence and consistency across container restarts or rebuilds.
+Rename the example files:
+```
+webapi.env.example   →   webapi.env
+sqlserver.env.example →  sqlserver.env
+```
 
-## 🚀 Future Enhancements
-- #### Spam Bid Detection
-  - Implement mechanisms to detect and block spam bids, ensuring fair auctions.  
-- #### Image Moderation
-  - Add automated checks to block inappropriate or harmful images uploaded by users.  
-- #### Rate Limiting
-  - Apply rate limits to critical endpoints to prevent abuse and ensure system stability.
+Fill in `webapi.env` with:
+```
+BIDX_DB_CONNECTION_STRING=...
+BIDX_JWT_SECRET_KEY=...
+BIDX_ADMIN_EMAIL=...
+BIDX_ADMIN_PASSWORD=...
+CLOUDINARY_CLOUDNAME=...
+CLOUDINARY_APIKEY=...
+CLOUDINARY_APISECRET=...
+GOOGLE_CLIENT_ID=...
+BREVO_API_KEY=...
+```
+
+**3. Update `appsettings.json`** if needed (frontend origin, email template IDs, etc.)
+
+**4. Start the containers**
+```bash
+docker-compose up --build
+```
+
+- API: `http://localhost:5000`
+- SQL Server: `localhost:1433`
+
+Database migrations run automatically on startup. Roles, admin account, cities, and categories are seeded if not already present.
+
+---
+
+## Project Structure
+
+```
+src/
+├── BidX.Presentation/
+│   ├── Controllers/          # HTTP API controllers
+│   ├── Hubs/                 # SignalR Hub (partial classes per feature)
+│   ├── BackgroundJobs/       # Quartz.NET OutboxProcessorJob
+│   ├── Utils/                # DI extensions, global exception handler
+│   └── Program.cs
+│
+├── BidX.BusinessLogic/
+│   ├── Services/             # Business logic (Auth, Auctions, Bids, Chat, etc.)
+│   ├── Interfaces/           # Service contracts
+│   ├── DTOs/                 # Request/Response objects
+│   ├── Events/               # Domain events (BidPlacedEvent, BidAcceptedEvent)
+│   ├── Handlers/             # MediatR notification handlers
+│   └── Extensions/           # Mapping extensions (no AutoMapper)
+│
+└── BidX.DataAccess/
+    ├── Entites/              # EF Core entity classes
+    ├── Configs/              # IEntityTypeConfiguration per entity
+    ├── Migrations/           # EF Core migrations
+    ├── SQL/                  # Raw SQL trigger files
+    └── AppDbContext.cs
+```
+
+---
+
+## Future Improvements
+
+- Rate limiting on bid and message endpoints
+- Full-text search index on `ProductName` (current LIKE search is non-sargable)
+- Hashed refresh token storage
+- Image moderation before Cloudinary upload
+- Spam bid detection
