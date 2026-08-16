@@ -1,0 +1,11 @@
+bin/
+obj/
+notes/
+vs/
+vs-code/
+vscode/
+Logs/
+TestController.cs
+*.env
+!*.env.example
+.vs/
